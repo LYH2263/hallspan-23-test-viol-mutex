@@ -12,21 +12,27 @@ router = APIRouter(prefix="/seating", tags=["seating"])
 def run_seating(hall_id: int = 1, db: Session = Depends(get_db)):
     hall = db.get(Hall, hall_id)
     if not hall: raise HTTPException(404, "考室不存在")
-    cands = [{"id": c.id, "name": c.name, "ticket_no": c.ticket_no, "paper_id": c.paper_id}
-             for c in db.scalars(select(Candidate).where(Candidate.hall_id == hall_id)).all()]
-    assigns, unplaced = place_candidates(hall.rows, hall.cols, hall.min_manhattan, cands)
-    viols = find_violations(hall.rows, hall.cols, hall.min_manhattan, assigns)
-    result = plan_to_dict(assigns, unplaced, viols, hall.rows, hall.cols)
-    result["hall"] = {"id": hall.id, "name": hall.name, "min_manhattan": hall.min_manhattan}
-    plan = SeatPlan(hall_id=hall_id, created_at=datetime.utcnow(), result_json=json.dumps(result, ensure_ascii=False))
-    db.add(plan); db.commit(); db.refresh(plan)
+    try:
+        cands = [{"id": c.id, "name": c.name, "ticket_no": c.ticket_no, "paper_id": c.paper_id}
+                 for c in db.scalars(select(Candidate).where(Candidate.hall_id == hall_id)).all()]
+        assigns, unplaced = place_candidates(hall.rows, hall.cols, hall.min_manhattan, cands)
+        viols = find_violations(hall.rows, hall.cols, hall.min_manhattan, assigns)
+        result = plan_to_dict(assigns, unplaced, viols, hall.rows, hall.cols)
+        result["hall"] = {"id": hall.id, "name": hall.name, "min_manhattan": hall.min_manhattan}
+        plan = SeatPlan(hall_id=hall_id, created_at=datetime.utcnow(), result_json=json.dumps(result, ensure_ascii=False))
+        db.add(plan); db.commit()
+    except Exception:
+        db.rollback()  # 生成失败不得留下脏方案
+        raise
+    db.refresh(plan)
     return {"id": plan.id, **result}
 
 @router.get("/latest")
 def latest(hall_id: int = 1, db: Session = Depends(get_db)):
     plan = db.scalars(select(SeatPlan).where(SeatPlan.hall_id == hall_id).order_by(SeatPlan.id.desc())).first()
     if not plan:
-        return run_seating(hall_id=hall_id, db=db)
+        # 无方案时读最新不得插入新行
+        raise HTTPException(404, "该考室暂无排座方案")
     data = json.loads(plan.result_json)
     return {"id": plan.id, **data}
 

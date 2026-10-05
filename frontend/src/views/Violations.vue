@@ -3,9 +3,12 @@ import { onMounted, ref } from 'vue'
 import { api } from '../api'
 const viols = ref<any[]>([])
 const unplaced = ref<any[]>([])
+const noPlan = ref(false)
 onMounted(async () => {
-  const res = await api('/seating/violations?hall_id=1')
-  viols.value = res.violations; unplaced.value = res.unplaced
+  try {
+    const res = await api('/seating/violations?hall_id=1')
+    viols.value = res.violations; unplaced.value = res.unplaced
+  } catch { noPlan.value = true }
 })
 </script>
 <template>
@@ -20,7 +23,8 @@ onMounted(async () => {
         </tr>
       </tbody>
     </table>
-    <p v-if="!viols.length" class="muted">无违规</p>
+    <p v-if="noPlan" class="muted">暂无排座方案，请先在「排座图」执行排座</p>
+    <p v-else-if="!viols.length" class="muted">无违规</p>
   </div>
   <div class="card" v-if="unplaced.length">
     <h3>未排上</h3>

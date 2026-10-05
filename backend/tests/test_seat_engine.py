@@ -22,12 +22,39 @@ def test_same_paper_not_adjacent_in_result():
     viols = find_violations(3, 3, 1, assigns)
     assert not any(v.kind == "same_paper_adjacent" for v in viols)
 
-def test_violation_detection():
+def test_distance_violation_is_its_own_kind():
+    # 不同卷、四邻距离 1 < 2：只记曼哈顿间距违规，不得捎带同卷四邻
+    assigns = [
+        SeatAssign(1, "A", "T1", 1, 0, 0),
+        SeatAssign(2, "B", "T2", 2, 0, 1),
+    ]
+    viols = find_violations(2, 2, 2, assigns)
+    assert [v.kind for v in viols] == ["distance"]
+    assert "曼哈顿" in viols[0].detail
+
+def test_same_paper_violation_is_its_own_kind():
+    # 同卷四邻但间距达标（min_dist=1）：只记同卷四邻违规，不得捎带间距
+    assigns = [
+        SeatAssign(1, "A", "T1", 1, 0, 0),
+        SeatAssign(2, "B", "T2", 1, 0, 1),
+    ]
+    viols = find_violations(2, 2, 1, assigns)
+    assert [v.kind for v in viols] == ["same_paper_adjacent"]
+    assert "四邻" in viols[0].detail
+
+def test_diagonal_same_paper_is_not_four_neighbor():
+    # 对角同套：间距 2 达标，且对角不是四邻，一条违规都不能有
+    assigns = [
+        SeatAssign(1, "A", "T1", 1, 0, 0),
+        SeatAssign(2, "B", "T2", 1, 1, 1),
+    ]
+    assert find_violations(2, 2, 2, assigns) == []
+
+def test_two_kinds_stay_two_entries():
+    # 同卷且四邻且间距不足：两类违规各自成条，不得并成一句
     assigns = [
         SeatAssign(1, "A", "T1", 1, 0, 0),
         SeatAssign(2, "B", "T2", 1, 0, 1),
     ]
     viols = find_violations(2, 2, 2, assigns)
-    kinds = {v.kind for v in viols}
-    assert "distance" in kinds
-    assert "same_paper_adjacent" in kinds
+    assert sorted(v.kind for v in viols) == ["distance", "same_paper_adjacent"]
